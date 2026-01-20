@@ -1,0 +1,108 @@
+#!/bin/bash
+#
+# UxPlay Windows Build Skill - CLI Entry Point
+#
+# This script is a simplified wrapper that can be called directly
+# by Claude Code or used manually.
+#
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# Check if called directly from skill directory
+if [ "$PWD" = "$SCRIPT_DIR" ]; then
+    cd "$REPO_ROOT"
+fi
+
+# Parse arguments
+ACTION="full"
+SOURCE_PATH="."
+VERBOSE=false
+CLEAN=false
+DEPENDENCIES=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h|--help)
+            cat << 'EOF'
+UxPlay Windows Build Skill
+
+Usage: build-windows [SOURCE_PATH] [OPTIONS]
+
+Arguments:
+  SOURCE_PATH    Path to UxPlay source directory (default: current directory)
+
+Options:
+  -h, --help          Show this help message
+  -c, --clean         Clean build directory before building
+  -d, --dependencies  Install WSL dependencies only
+  -v, --verbose       Enable verbose output
+
+Examples:
+  build-windows                    # Full build
+  build-windows ./src              # Build from specific source
+  build-windows --clean            # Clean and rebuild
+  build-windows --dependencies     # Install dependencies only
+
+EOF
+            exit 0
+            ;;
+        -c|--clean)
+            CLEAN=true
+            shift
+            ;;
+        -d|--dependencies)
+            DEPENDENCIES=true
+            shift
+            ;;
+        -v|--verbose)
+            VERBOSE=true
+            set -x
+            shift
+            ;;
+        -*)
+            echo "Unknown option: $1" >&2
+            exit 1
+            ;;
+        *)
+            SOURCE_PATH="$1"
+            shift
+            ;;
+    esac
+done
+
+# Make the main script executable and run it
+MAIN_SCRIPT="$REPO_ROOT/build_windows.sh"
+
+if [ ! -f "$MAIN_SCRIPT" ]; then
+    echo "Error: Main build script not found at $MAIN_SCRIPT" >&2
+    echo "Make sure you're in the UxPlay repository" >&2
+    exit 1
+fi
+
+chmod +x "$MAIN_SCRIPT"
+
+# Build argument string
+ARGS=()
+if [ "$CLEAN" = true ]; then
+    ARGS+=("--clean")
+fi
+if [ "$DEPENDENCIES" = true ]; then
+    ARGS+=("--dependencies")
+fi
+if [ "$VERBOSE" = true ]; then
+    ARGS+=("--verbose")
+fi
+if [ "$SOURCE_PATH" != "." ]; then
+    ARGS+=("$SOURCE_PATH")
+fi
+
+# Run the main build script
+echo "🚀 Starting UxPlay Windows build..."
+echo "   Source: $SOURCE_PATH"
+echo "   Script: $MAIN_SCRIPT"
+echo ""
+
+exec "$MAIN_SCRIPT" "${ARGS[@]}"

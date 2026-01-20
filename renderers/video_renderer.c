@@ -24,6 +24,11 @@
 #include <gst/app/gstappsrc.h>
 #include "video_renderer.h"
 
+#ifdef _WIN32
+#include "windows_window.h"
+#include <stdio.h>
+#endif
+
 #define SECOND_IN_NSECS 1000000000UL
 #define SECOND_IN_MICROSECS 1000000
 #ifdef X_DISPLAY_FIX
@@ -32,6 +37,10 @@
 static bool fullscreen = false;
 static bool alt_keypress = false;
 static unsigned char X11_search_attempts = 0;
+#endif
+#ifdef _WIN32
+static bool fullscreen = false;
+static void *windows_window_handle = NULL;
 #endif
 
 static GstClockTime gst_video_pipeline_base_time = GST_CLOCK_TIME_NONE;
@@ -181,7 +190,7 @@ void video_renderer_size(float *f_width_source, float *f_height_source, float *f
 }
 
 GstElement *make_video_sink(const char *videosink, const char *videosink_options) {
-    /* used to build a videosink for playbin, using the user-specified string "videosink" */ 
+    /* used to build a videosink for playbin, using the user-specified string "videosink" */
     GstElement *video_sink = gst_element_factory_make(videosink, "videosink");
     if (!video_sink) {
         return NULL;
@@ -198,11 +207,11 @@ GstElement *make_video_sink(const char *videosink, const char *videosink_options
 
     /* remove any extension begining with "!" */
     char *end = strchr(options, '!');
-    if (end) {   
+    if (end) {
       *end = '\0';
     }
 
-    /* add any fullscreen options "property=pval" included in string videosink_options*/    
+    /* add any fullscreen options "property=pval" included in string videosink_options*/
     /* OK to use strtok_r in Windows with MSYS2 (POSIX); use strtok_s for MSVC */
     char *token = NULL;
     char *text = options;
@@ -219,12 +228,21 @@ GstElement *make_video_sink(const char *videosink, const char *videosink_options
         }
     }
     free(options);
+
+#ifdef _WIN32
+    /* Bind to exclusive fullscreen window if available */
+    if (windows_window_handle && fullscreen) {
+        g_object_set(G_OBJECT(video_sink), "window-handle", (gpointer)windows_window_handle, NULL);
+    }
+#endif
+
     return video_sink;
 }
 
 void video_renderer_init(logger_t *render_logger, const char *server_name, videoflip_t videoflip[2], const char *parser, const char * rtp_pipeline,
-                          const char *decoder, const char *converter, const char *videosink, const char *videosink_options, 
-                          bool initial_fullscreen, bool video_sync, bool h265_support, bool coverart_support, guint playbin_version, const char *uri) {
+                          const char *decoder, const char *converter, const char *videosink, const char *videosink_options,
+                          bool initial_fullscreen, bool video_sync, bool h265_support, bool coverart_support, guint playbin_version, const char *uri,
+                          void *hwnd) {
     GError *error = NULL;
     GstCaps *caps = NULL;
     bool rtp = (bool) strlen(rtp_pipeline);
@@ -410,7 +428,7 @@ void video_renderer_init(logger_t *render_logger, const char *server_name, video
         renderer_type[i]->gst_window = NULL;
         renderer_type[i]->use_x11 = false;
         X11_search_attempts = 0;
-        /* setting char *x11_display_name to NULL means the value is taken from $DISPLAY in the environment 
+        /* setting char *x11_display_name to NULL means the value is taken from $DISPLAY in the environment
          * (a uxplay option to specify a different value is possible)  */
         char *x11_display_name = NULL;
         if (use_x11) {
@@ -429,6 +447,36 @@ void video_renderer_init(logger_t *render_logger, const char *server_name, video
                 g_assert(renderer_type[i]->gst_window);
                 memcpy(renderer_type[i]->gst_window, renderer_type[0]->gst_window, sizeof(X11_Window_t));
                 renderer_type[i]->use_x11 = true;
+            }
+        }
+#endif
+#ifdef _WIN32
+        /* Handle Windows exclusive fullscreen mode */
+        if (initial_fullscreen && hwnd) {
+            fullscreen = true;
+            windows_window_handle = hwnd;
+
+            /* Set the window handle for GStreamer video sink binding */
+            /* The window handle will be bound to the video sink when the pipeline is started */
+            if (renderer_type[i]->pipeline) {
+                /* For playbin-based pipelines (HLS), we'll bind the window later */
+                if (hls_video) {
+                    logger_log(logger, LOGGER_DEBUG, "Windows fullscreen: Will bind to window handle %p when HLS pipeline starts", hwnd);
+                } else {
+                    /* For direct pipeline, bind to the video sink */
+                    GstElement *video_sink = NULL;
+                    if (renderer_type[i]->codec) {
+                        char sink_name[64];
+                        snprintf(sink_name, sizeof(sink_name), "%s_", renderer_type[i]->codec);
+                        video_sink = gst_bin_get_by_name(GST_BIN(renderer_type[i]->pipeline), sink_name);
+                        if (video_sink) {
+                            /* Bind to the exclusive fullscreen window */
+                            g_object_set(G_OBJECT(video_sink), "window-handle", (gpointer)hwnd, NULL);
+                            logger_log(logger, LOGGER_DEBUG, "Windows fullscreen: Bound video sink to window handle %p", hwnd);
+                            gst_object_unref(video_sink);
+                        }
+                    }
+                }
             }
         }
 #endif
@@ -484,6 +532,19 @@ void video_renderer_start() {
 	gst_element_get_state(renderer->pipeline, &state, NULL, 1000 * GST_MSECOND);
 	state_name = gst_element_state_get_name(state);
 	logger_log(logger, LOGGER_DEBUG, "video renderer_start: state %s", state_name);
+
+#ifdef _WIN32
+        /* Bind Windows fullscreen window handle to playbin video sink for HLS */
+        if (fullscreen && windows_window_handle) {
+            GstElement *video_sink = NULL;
+            g_object_get(renderer->pipeline, "video-sink", &video_sink, NULL);
+            if (video_sink) {
+                g_object_set(G_OBJECT(video_sink), "window-handle", (gpointer)windows_window_handle, NULL);
+                logger_log(logger, LOGGER_DEBUG, "Windows fullscreen: Bound HLS video sink to window handle %p", windows_window_handle);
+                gst_object_unref(video_sink);
+            }
+        }
+#endif
         return;
     } 
     /* when not hls, start both h264 and h265 pipelines; will shut down the "wrong" one when we know the codec */

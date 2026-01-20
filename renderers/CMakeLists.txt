@@ -38,10 +38,20 @@ pkg_check_modules(GST REQUIRED    gstreamer-1.0>=1.4
                                   gstreamer-app-1.0>=1.4
 )
 
+if (WIN32)
+    set( RENDERER_SOURCES
+         audio_renderer.c
+         video_renderer.c
+         windows_window.c )
+else()
+    set( RENDERER_SOURCES
+         audio_renderer.c
+         video_renderer.c )
+endif()
+
 add_library( renderers
              STATIC
-             audio_renderer.c
-	     video_renderer.c )
+             ${RENDERER_SOURCES} )
 
 target_link_libraries ( renderers PUBLIC airplay )
 

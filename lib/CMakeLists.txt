@@ -56,6 +56,9 @@ find_package(PkgConfig REQUIRED)
 aux_source_directory(. play_src)
 set(DIR_SRCS ${play_src})
 
+# Add screen_saver.c specifically (not all .c files to avoid conflicts)
+list(APPEND DIR_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/screen_saver.c")
+
 add_library( airplay  STATIC
              ${DIR_SRCS}
            )
@@ -66,13 +69,14 @@ if ( APPLE )
                          playfair
                          llhttp )
 elseif( WIN32 )
-  target_link_libraries( airplay 
+  target_link_libraries( airplay
                          pthread
                          playfair
                          llhttp
                          wsock32
-			 iphlpapi
-                         ws2_32 )
+                         iphlpapi
+                         ws2_32
+                         powrprof )
 else()
   target_link_libraries( airplay PUBLIC
           pthread

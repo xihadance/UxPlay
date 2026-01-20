@@ -40,6 +40,11 @@ if( UNIX AND NOT APPLE )
   endif()
 endif()
 
+# Screen saver support is now cross-platform
+# Linux/*BSD: Uses D-Bus if available
+# Windows: Uses Windows power management APIs
+# macOS: Uses Core Graphics/IOKit (future)
+
 if( UNIX AND NOT APPLE )
   add_definitions( -DSUPPRESS_AVAHI_COMPAT_WARNING )
   # convert AirPlay colormap 1:3:7:1 to sRGB (1:1:7:1), needed on Linux and BSD

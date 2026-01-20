@@ -1,0 +1,83 @@
+{
+  "name": "build-windows-exe",
+  "version": "1.0.0",
+  "description": "Build UxPlay Windows EXE from WSL using cross-compilation",
+  "main": "skill.js",
+  "type": "module",
+  "keywords": [
+    "uxplay",
+    "windows",
+    "exe",
+    "build",
+    "wsl",
+    "cross-compile",
+    "airplay"
+  ],
+  "author": "Claude Code",
+  "license": "GPL-3.0",
+  "icon": "🔨",
+  "commands": [
+    {
+      "name": "build-windows",
+      "description": "Build UxPlay for Windows from WSL",
+      "usage": "build-windows [path-to-source]",
+      "parameters": [
+        {
+          "name": "source",
+          "type": "string",
+          "description": "Path to UxPlay source directory",
+          "required": false
+        },
+        {
+          "name": "clean",
+          "type": "boolean",
+          "description": "Clean build directory before building",
+          "default": false
+        },
+        {
+          "name": "dependencies",
+          "type": "boolean",
+          "description": "Install WSL dependencies only",
+          "default": false
+        }
+      ]
+    }
+  ],
+  "examples": [
+    {
+      "command": "build-windows",
+      "description": "Full build of UxPlay for Windows"
+    },
+    {
+      "command": "build-windows /path/to/source",
+      "description": "Build from specific source directory"
+    },
+    {
+      "command": "build-windows --clean",
+      "description": "Clean and rebuild"
+    },
+    {
+      "command": "build-windows --dependencies",
+      "description": "Install only build dependencies"
+    }
+  ],
+  "requirements": {
+    "wsl": true,
+    "bonjour-sdk": "Required for DNS-SD/mDNS discovery",
+    "internet": "Required to download dependencies"
+  },
+  "tags": [
+    "build",
+    "windows",
+    "wsl",
+    "cross-compilation",
+    "airplay",
+    "uxplay"
+  ],
+  "dependencies": {
+    "bash": ">=4.0",
+    "cmake": ">=3.10",
+    "ninja": ">=1.8",
+    "gcc-mingw-w64": ">=9.0"
+  }
+}

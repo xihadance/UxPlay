@@ -34,14 +34,14 @@
     which muxes audio and video into a mpeg4 container still needs to be
     created: Pull Requests welcomed).
 
--   (for Linux/\*BSD Desktop Environments using D-Bus). New option
-    `-scrsv <n>` provides screensaver inhibition (e.g., to prevent
-    screensaver function while watching mirrored videos without keyboard
+-   Cross-platform screensaver inhibition with the new option `-scrsv <n>` (e.g., to
+    prevent screensaver function while watching mirrored videos without keyboard
     or mouse activity): n = 0 (off) n=1 (on during video activity) n=2
-    (always on while UxPlay is running). Tested on
-    Gnome/KDE/Cinnamon/Mate/Xfce 4: may need adjustment for other
-    Desktop Environments (please report). (watch output of
-    `dbus-monitor` to verify that inhibition is working). *Might not
+    (always on while UxPlay is running).
+    -   **Windows**: Uses Windows power management APIs (SetThreadExecutionState)
+    -   **Linux/*BSD**: Uses D-Bus org.freedesktop.ScreenSaver interface (tested on Gnome/KDE/Cinnamon/Mate/Xfce 4)
+    -   **macOS**: Core Graphics/IOKit support (coming soon)
+    On Linux/*BSD, you can watch output of `dbus-monitor` to verify that inhibition is working. *Might not
     work on Wayland*.
 
 -   option -ca (with no filename given) will now render Apple Music
@@ -1154,14 +1154,20 @@ Spanish (second choice), and English (third choice). If option `-lang`
 is not followed by a list (or `-list 0` is used), \$LANGUAGE is ignored
 and undubbed audio is played.
 
-**-scrsv n**. (since 1.73) (So far, only implemented on Linux/\*BSD
-systems using D-Bus). Inhibit the screensaver in the absence of keyboard
-input (e.g., while watching video), using the
-org.freedesktop.ScreenSaver D-Bus service: n = 0: (off) n= 1 (on during
-video activity) n=2 (always on). *Note: to verify this feature is
-working, you can use `dbus-monitor` to view events on the D-Bus;
-depending on the Desktop Environment, commands like
-`gnome-session-inhibit -l`, `xfce4-screensaver-commannd -q`, etc.,
+**-scrsv n**. (since 1.73) Cross-platform screensaver inhibition in the
+absence of keyboard input (e.g., while watching video):
+-   **n = 0**: (off) No screen saver inhibition
+-   **n = 1**: (on during video activity) Inhibit only when actively receiving video
+-   **n = 2**: (always on) Inhibit whenever UxPlay is running
+
+**Platform-specific implementations:**
+-   **Windows**: Uses Windows power management APIs (`SetThreadExecutionState`)
+-   **Linux/\*BSD**: Uses D-Bus `org.freedesktop.ScreenSaver` service
+-   **macOS**: Core Graphics/IOKit support (coming soon)
+
+*Note: For Linux/\*BSD, to verify this feature is working, you can use `dbus-monitor`
+to view events on the D-Bus; depending on the Desktop Environment, commands like
+`gnome-session-inhibit -l`, `xfce4-screensaver-command -q`, etc.,
 should list UxPlay when it is inhibiting the screensaver.*
 
 **-pin \[nnnn\]**: (since v1.67) use Apple-style (one-time) "pin"
@@ -1993,8 +1999,8 @@ what version UxPlay claims to be.
 # Changelog
 
 1.73 2025-11-10 Render Audio cover-art inside UxPlay with -ca option (no
-file specified). (D-Bus based) option -scrsv `<n>`{=html} to inhibit
-screensaver while UxPlay is running (Linux/\*BSD only). Add password
+file specified). Cross-platform option -scrsv `<n>`{=html} to inhibit
+screensaver while UxPlay is running (Windows, Linux/\*BSD). Add password
 support (-pw) using a displayed pin code as a password that changes
 every time (and not as a one-time pin). Add support for Service
 Discovery using a Bluetooth LE beacon. Add -vrtp option for forwarding
