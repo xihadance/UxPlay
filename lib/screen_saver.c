@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <math.h>
 
 /* Platform detection */
 #if defined(_WIN32)
@@ -324,16 +325,7 @@ bool screen_saver_is_supported(void) {
 static bool platform_init(void) {
     #ifdef SCREEN_SAVER_WINDOWS
         if (!windows_initialized) {
-            /* Store original execution state */
-            original_exec_state = GetThreadExecutionState();
-
-            /* Check if GetThreadExecutionState succeeded */
-            if (original_exec_state == 0 && GetLastError() != ERROR_SUCCESS) {
-                LOG_ERROR("Windows: Failed to get thread execution state (error %lu)\n", GetLastError());
-                return false;
-            }
-
-            /* Set to prevent display shutdown */
+            /* Set to prevent display shutdown and capture previous state */
             DWORD result = SetThreadExecutionState(ES_CONTINUOUS | ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED);
 
             if (result == 0) {
@@ -341,6 +333,7 @@ static bool platform_init(void) {
                 return false;
             }
 
+            original_exec_state = result;
             windows_initialized = true;
             LOG_DEBUG("Windows: Initialized screen saver inhibition\n");
         }

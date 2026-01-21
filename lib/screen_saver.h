@@ -5,7 +5,7 @@
  *
  * Provides unified API for inhibiting screen saver/sleep on different platforms:
  * - Windows: Uses SetThreadExecutionState and power management APIs
- * - Linux/*BSD: Uses D-Bus org.freedesktop.ScreenSaver interface
+ * - Linux/BSD: Uses D-Bus org.freedesktop.ScreenSaver interface
  * - macOS: Uses Core Graphics/IOKit (future)
  *
  * Copyright (C) 2025 UxPlay contributors
