@@ -1003,6 +1003,12 @@ DLLs and GStreamer plugins and do not require MSYS2 or Bonjour to be installed.
 The workflow also uploads Linux and macOS binaries; those require the runtime
 dependencies described in their build instructions above.
 
+After all four builds succeed, pushes to the default branch and manual runs
+on that branch also publish the packages under this fork's **Releases** as a
+`build-<run number>` prerelease. Pushing a `v*` tag publishes a normal release.
+Pull request builds only upload Artifacts. Re-running a workflow updates the
+attachments of its existing release.
+
 -   tested on Windows 10 and 11, 64-bit on x86_64, and Windows 11 on ARM.
 
 * **NEW: Uxplay >=1.74  now supplies its own self-contained mdns replacement for Bonjour, making step 1 unnecessary unless
