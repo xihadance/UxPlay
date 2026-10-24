@@ -995,6 +995,14 @@ After the first time a pin authentication has been done, a client will not need 
 
 ## Building UxPlay on Microsoft Windows, using MSYS2 with the MinGW-64 compiler.
 
+The GitHub Actions **Build** workflow publishes Windows x64 (UCRT64) and
+ARM64 (CLANGARM64) ZIP packages in the successful run's **Artifacts** section,
+with a retention period of 30 days. Extract the entire ZIP and run
+`start-uxplay.cmd -h` to see the options. These packages include the runtime
+DLLs and GStreamer plugins and do not require MSYS2 or Bonjour to be installed.
+The workflow also uploads Linux and macOS binaries; those require the runtime
+dependencies described in their build instructions above.
+
 -   tested on Windows 10 and 11, 64-bit on x86_64, and Windows 11 on ARM.
 
 * **NEW: Uxplay >=1.74  now supplies its own self-contained mdns replacement for Bonjour, making step 1 unnecessary unless

@@ -1,10 +1,14 @@
 name: Build
 
 on:
+  workflow_dispatch:
   push:
     branches: [ master, main ]
   pull_request:
     branches: [ master, main ]
+
+permissions:
+  contents: read
 
 env:
   BUILD_TYPE: RelWithDebInfo
@@ -42,7 +46,7 @@ jobs:
       - name: Configure CMake
         run: |
           cmake -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
-            -DNO_X11_DEPS=OFF
+            -DNO_X11_DEPS=OFF -DNO_MARCH_NATIVE=ON
 
       - name: Build
         run: cmake --build build --parallel
@@ -51,6 +55,17 @@ jobs:
         run: |
           test -x build/uxplay
           ls -la build/uxplay
+
+      - name: Package binary
+        run: tar -czf build/uxplay-linux-${{ runner.arch }}.tar.gz -C build uxplay -C "$GITHUB_WORKSPACE" LICENSE README.md lib/llhttp/LICENSE-MIT
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: uxplay-linux-${{ runner.arch }}
+          path: build/uxplay-linux-*.tar.gz
+          if-no-files-found: error
+          retention-days: 30
 
   build-macos:
     runs-on: macos-latest
@@ -81,7 +96,7 @@ jobs:
       - name: Configure CMake
         run: |
           cmake -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
-            -DNO_X11_DEPS=ON
+            -DNO_X11_DEPS=ON -DNO_MARCH_NATIVE=ON
 
       - name: Build
         run: cmake --build build --parallel
@@ -91,18 +106,27 @@ jobs:
           test -x build/uxplay
           ls -la build/uxplay
 
+      - name: Package binary
+        run: tar -czf build/uxplay-macos-${{ runner.arch }}.tar.gz -C build uxplay -C "$GITHUB_WORKSPACE" LICENSE README.md lib/llhttp/LICENSE-MIT
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: uxplay-macos-${{ runner.arch }}
+          path: build/uxplay-macos-*.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+
   build-windows-intel:
     runs-on: windows-latest
     strategy:
+      fail-fast: false
       matrix:
-        msystem: [UCRT64, MINGW64]
+        msystem: [UCRT64]
         include:
           - msystem: UCRT64
             pkg_prefix: mingw-w64-ucrt-x86_64
             path_prefix: ucrt64
-          - msystem: MINGW64
-            pkg_prefix: mingw-w64-x86_64
-            path_prefix: mingw64
     defaults:
       run:
         shell: msys2 {0}
@@ -123,6 +147,8 @@ jobs:
             ${{ matrix.pkg_prefix }}-gstreamer
             ${{ matrix.pkg_prefix }}-gst-plugins-base
             ${{ matrix.pkg_prefix }}-gst-plugins-good
+            ${{ matrix.pkg_prefix }}-gst-plugins-bad
+            ${{ matrix.pkg_prefix }}-gst-libav
             ${{ matrix.pkg_prefix }}-pkg-config
             base-devel
 
@@ -130,8 +156,9 @@ jobs:
         env:
           PKG_CONFIG_PATH: /${{ matrix.path_prefix }}/lib/pkgconfig
         run: |
+          echo "MSYS2_RUNTIME_PREFIX=$(cygpath -w "$MINGW_PREFIX")" >> "$GITHUB_ENV"
           cmake -B build -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
-            -DNO_X11_DEPS=ON
+            -DNO_X11_DEPS=ON -DNO_MARCH_NATIVE=ON
 
       - name: Build
         run: cmake --build build --parallel
@@ -141,10 +168,28 @@ jobs:
           test -f build/uxplay.exe
           ls -la build/uxplay.exe
 
+      - name: Package Windows runtime
+        shell: pwsh
+        run: ./scripts/package-windows.ps1 -RuntimePrefix $env:MSYS2_RUNTIME_PREFIX -Architecture x64
+
+      - name: Verify portable runtime
+        shell: pwsh
+        run: ./scripts/verify-windows-package.ps1 -PackageDirectory build/artifacts/uxplay-windows-x64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: uxplay-windows-x64
+          path: build/artifacts/uxplay-windows-x64.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
 
   build-windows-arm64:
     runs-on: windows-11-arm
     strategy:
+      fail-fast: false
       matrix:
         msystem: [CLANGARM64]
         include:
@@ -171,6 +216,8 @@ jobs:
             ${{ matrix.pkg_prefix }}-gstreamer
             ${{ matrix.pkg_prefix }}-gst-plugins-base
             ${{ matrix.pkg_prefix }}-gst-plugins-good
+            ${{ matrix.pkg_prefix }}-gst-plugins-bad
+            ${{ matrix.pkg_prefix }}-gst-libav
             ${{ matrix.pkg_prefix }}-pkg-config
             base-devel
 
@@ -178,8 +225,9 @@ jobs:
         env:
           PKG_CONFIG_PATH: /${{ matrix.path_prefix }}/lib/pkgconfig
         run: |
+          echo "MSYS2_RUNTIME_PREFIX=$(cygpath -w "$MINGW_PREFIX")" >> "$GITHUB_ENV"
           cmake -B build -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
-            -DNO_X11_DEPS=ON
+            -DNO_X11_DEPS=ON -DNO_MARCH_NATIVE=ON
 
       - name: Build
         run: cmake --build build --parallel
@@ -188,4 +236,21 @@ jobs:
         run: |
           test -f build/uxplay.exe
           ls -la build/uxplay.exe
+
+      - name: Package Windows runtime
+        shell: pwsh
+        run: ./scripts/package-windows.ps1 -RuntimePrefix $env:MSYS2_RUNTIME_PREFIX -Architecture arm64
+
+      - name: Verify portable runtime
+        shell: pwsh
+        run: ./scripts/verify-windows-package.ps1 -PackageDirectory build/artifacts/uxplay-windows-arm64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: uxplay-windows-arm64
+          path: build/artifacts/uxplay-windows-arm64.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
 
