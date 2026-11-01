@@ -47,7 +47,7 @@ void video_renderer_set_window_handle(uintptr_t handle) {
     external_window_handle = handle;
 }
 
-#define SECOND_IN_NSECS 1000000000UL
+#define SECOND_IN_NSECS 1000000000ULL
 #ifdef X_DISPLAY_FIX
 #include <gst/video/navigation.h>
 #include "x_display_fix.h"
@@ -461,22 +461,20 @@ void video_renderer_init(logger_t *render_logger, const char *server_name, video
         /* setting char *x11_display_name to NULL means the value is taken from $DISPLAY in the environment 
          * (a uxplay option to specify a different value is possible)  */
         char *x11_display_name = NULL;
-        if (use_x11) {
-            if (i == 0) {
-                renderer_type[0]->gst_window = (X11_Window_t *) calloc(1, sizeof(X11_Window_t));
-                g_assert(renderer_type[0]->gst_window);
-                get_X11_Display(renderer_type[0]->gst_window, x11_display_name);
-                if (renderer_type[0]->gst_window->display) {
-                    renderer_type[0]->use_x11 = true;
-                } else {
-                    free(renderer_type[0]->gst_window);
-                    renderer_type[0]->gst_window = NULL;
-                }
-            } else if (renderer_type[0]->use_x11) {
-                renderer_type[i]->gst_window = (X11_Window_t *) calloc(1, sizeof(X11_Window_t));
-                g_assert(renderer_type[i]->gst_window);
-                memcpy(renderer_type[i]->gst_window, renderer_type[0]->gst_window, sizeof(X11_Window_t));
+        /* each renderer opens its own X11 Display connection: unused renderers are destroyed
+         * (closing their Display) once the codec is chosen, so the connection cannot be shared */
+        if (use_x11 && (i == 0 || renderer_type[0]->use_x11)) {
+            if (!init_X11_threads()) {
+                logger_log(logger, LOGGER_WARNING, "XInitThreads() failed: Xlib thread support is not available");
+            }
+            renderer_type[i]->gst_window = (X11_Window_t *) calloc(1, sizeof(X11_Window_t));
+            g_assert(renderer_type[i]->gst_window);
+            get_X11_Display(renderer_type[i]->gst_window, x11_display_name);
+            if (renderer_type[i]->gst_window->display) {
                 renderer_type[i]->use_x11 = true;
+            } else {
+                free(renderer_type[i]->gst_window);
+                renderer_type[i]->gst_window = NULL;
             }
         }
 #endif
@@ -741,16 +739,16 @@ static void video_renderer_destroy_instance(video_renderer_t *renderer) {
         GstState state;
         GstStateChangeReturn ret;
         gst_element_get_state(renderer->pipeline, &state, NULL, 100 * GST_MSECOND);
-        logger_log(logger, LOGGER_DEBUG,"pipeline state is %s", gst_element_state_get_name(state));
+        logger_log(logger, LOGGER_DEBUG, "pipeline state is %s", gst_element_state_get_name(state));
         if (state != GST_STATE_NULL) {
             if (!hls_video) {
                 gst_app_src_end_of_stream (GST_APP_SRC(renderer->appsrc));
             }
             ret = gst_element_set_state (renderer->pipeline, GST_STATE_NULL);
-            logger_log(logger, LOGGER_DEBUG,"pipeline_state_change_return: %s",
+            logger_log(logger, LOGGER_DEBUG, "pipeline_state_change_return: %s",
                        gst_element_state_change_return_get_name(ret));
             gst_element_get_state(renderer->pipeline, &state, NULL, 1000 * GST_MSECOND);
-            logger_log(logger, LOGGER_DEBUG,"pipeline state is %s", gst_element_state_get_name(state));
+            logger_log(logger, LOGGER_DEBUG, "pipeline state is %s", gst_element_state_get_name(state));
         }
         if (renderer->appsrc) {
             gst_object_unref (renderer->appsrc);
@@ -766,9 +764,10 @@ static void video_renderer_destroy_instance(video_renderer_t *renderer) {
         }	
         gst_object_unref(renderer->bus);
         gst_object_unref(renderer->pipeline);
+
 #ifdef X_DISPLAY_FIX
-        if (renderer->gst_window){
-	  // free_X11_Display(renderer->gst_window);   without this, a memory leak; with it, a coredump
+        if (renderer->gst_window) {
+            close_X11_display(renderer->gst_window);
             free(renderer->gst_window);
             renderer->gst_window = NULL;
         }
@@ -778,7 +777,7 @@ static void video_renderer_destroy_instance(video_renderer_t *renderer) {
         }
         free (renderer);
         renderer = NULL;
-        logger_log(logger, LOGGER_DEBUG,"renderer destroyed\n");	
+        logger_log(logger, LOGGER_DEBUG, "renderer destroyed\n");	
     }
 }
 
