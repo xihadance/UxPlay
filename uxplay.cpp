@@ -234,6 +234,12 @@ static const char *reason_always = "mirroring client: inhibit always";
 static const char *reason_active = "actively receiving video";
 static float previous_hls_position = 0.0f;
 #endif
+#ifdef _WIN32
+/* Windows: inhibit display sleep / screensaver with a power request (not tied to the calling thread) */
+static HANDLE power_request = NULL;
+static bool power_request_active = false;
+static float previous_hls_position = 0.0f;
+#endif
 
 typedef enum pi_list_e {
     PI_MODEL_UNKNOWN,
@@ -297,6 +303,40 @@ static void log(int level, const char* format, ...) {
 #define LOGI(...) log(LOGGER_INFO, __VA_ARGS__)
 #define LOGW(...) log(LOGGER_WARNING, __VA_ARGS__)
 #define LOGE(...) log(LOGGER_ERR, __VA_ARGS__)
+
+#ifdef _WIN32
+static void windows_screensaver_inhibiter(bool inhibit) {
+    if (inhibit == power_request_active) {
+        return;
+    }
+    if (!power_request) {
+        REASON_CONTEXT context;
+        context.Version = POWER_REQUEST_CONTEXT_VERSION;
+        context.Flags = POWER_REQUEST_CONTEXT_SIMPLE_STRING;
+        context.Reason.SimpleReasonString = (LPWSTR) L"UxPlay: displaying AirPlay video";
+        power_request = PowerCreateRequest(&context);
+        if (power_request == INVALID_HANDLE_VALUE) {
+            power_request = NULL;
+            LOGE("screen_saver: PowerCreateRequest failed, error %lu", GetLastError());
+            return;
+        }
+    }
+    BOOL ret;
+    if (inhibit) {
+        ret = PowerSetRequest(power_request, PowerRequestDisplayRequired) &&
+              PowerSetRequest(power_request, PowerRequestSystemRequired);
+    } else {
+        ret = PowerClearRequest(power_request, PowerRequestDisplayRequired) &&
+              PowerClearRequest(power_request, PowerRequestSystemRequired);
+    }
+    if (!ret) {
+        LOGE("screen_saver: Power%sRequest failed, error %lu", inhibit ? "Set" : "Clear", GetLastError());
+        return;
+    }
+    LOGD("screen_saver: display sleep %s", inhibit ? "inhibited" : "allowed");
+    power_request_active = inhibit;
+}
+#endif
 
 #ifdef DBUS
 static void dbus_screensaver_inhibiter(bool inhibit) {
@@ -1117,6 +1157,7 @@ static void print_info (char *name) {
     printf("-rpi n    Set pre-selected HLS \"profile strings\" on R PI by model code n\n");
     printf("-rpi      Shows possible Raspberry Pi model codes n for \"-rpi n\"\n");
     printf("-scrsv n  Screensaver override n: 0=off 1=on while displaying video 2=always on\n");
+    printf("          (Linux/*BSD with D-Bus; Windows: also prevents display sleep)\n");
     printf("-pin[xxxx]Use a 4-digit pin code to control client access (default: no)\n");
     printf("          default pin is random: optionally use fixed pin xxxx\n");
     printf("-p2p      Advertise and accept AirPlay over Apple peer-to-peer (macOS only)\n");
@@ -1715,10 +1756,10 @@ static void parse_arguments (int argc, char *argv[]) {
                 fprintf(stderr, "invalid \"-scrsv %s\"; values 0, 1, 2 allowed\n", argv[i]);
                 exit(1);
             }
-#ifdef DBUS
+#if defined(DBUS) || defined(_WIN32)
             scrsv = n;
 #else
-            fprintf(stderr,"invalid: option \"-scrsv\" is currently only implemented for Linux/*BSD systems with D-Bus service\n");
+            fprintf(stderr,"invalid: option \"-scrsv\" is currently only implemented for Windows and Linux/*BSD systems with D-Bus service\n");
             exit(1);
 #endif
         } else if (arg == "-vsync") {
@@ -2852,6 +2893,13 @@ extern "C" void mirror_video_running  (void *cls, bool is_running) {
     }
     dbus_screensaver_inhibiter(is_running);
 }
+#elif defined(_WIN32)
+extern "C" void mirror_video_running  (void *cls, bool is_running) {
+    if (scrsv != 1) {
+        return;
+    }
+    windows_screensaver_inhibiter(is_running);
+}
 #endif
 
 extern "C" void video_pause (void *cls) {
@@ -3148,6 +3196,15 @@ extern "C" void on_video_acquire_playback_info (void *cls, playback_info_t *play
         }
         previous_hls_position = playback_info->position;
     }
+#elif defined(_WIN32)
+    if (scrsv == 1) {
+        if (playback_info->position > previous_hls_position && !power_request_active) {
+            windows_screensaver_inhibiter(true);
+        } else if (playback_info->position == previous_hls_position && power_request_active) {
+            windows_screensaver_inhibiter(false);
+        }
+        previous_hls_position = playback_info->position;
+    }
 #endif
     
     if (!still_playing) {
@@ -3205,7 +3262,7 @@ static int start_raop_server (unsigned short display[5], unsigned short tcp[3], 
     raop_cbs.export_dacp = export_dacp;
     raop_cbs.video_reset = video_reset;
     raop_cbs.video_set_codec_and_size = video_set_codec_and_size;
-#ifdef DBUS
+#if defined(DBUS) || defined(_WIN32)
     raop_cbs.mirror_video_running = mirror_video_running;
 #endif
     raop_cbs.on_video_play = on_video_play;
@@ -3531,6 +3588,18 @@ int main (int argc, char *argv[]) {
             dbus_screensaver_inhibiter(true);
         }
     }
+#elif defined(_WIN32)
+    if (scrsv && !use_video) {
+        LOGI ("-scrsv = %d will be ignored, as no video will be rendered", scrsv);
+        scrsv = 0;
+    }
+    if (scrsv) {
+        LOGI("Will inhibit Windows screensaver and display sleep %s",
+             (scrsv == 1 ? "while displaying mirrored or streamed video" : "always"));
+        if (scrsv == 2) {
+            windows_screensaver_inhibiter(true);
+        }
+    }
 #endif
     if (audiosink == "0") {
         use_audio = false;
@@ -3838,6 +3907,12 @@ static void cleanup() {
             dbus_pending_call_unref(dbus_pending);
         }
         dbus_connection_unref(dbus_connection);
+    }
+#elif defined(_WIN32)
+    if (power_request) {
+        windows_screensaver_inhibiter(false);
+        CloseHandle(power_request);
+        power_request = NULL;
     }
 #endif
     exit(0);

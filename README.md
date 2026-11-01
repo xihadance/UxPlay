@@ -1275,8 +1275,10 @@ followed by a list, any previous language selection is removed.
 **-slang \[list\]**. Similar to `-lang`, but specifies language preferences for subtitle languages.
 (If not present, preferences specified by  `-lang ...` will be used.)
 
-**-scrsv n**. (since 1.73) (So far, only implemented
-on Linux/*BSD systems using D-Bus). Inhibit the screensaver in the
+**-scrsv n**. (since 1.73) (Implemented on Linux/*BSD systems using D-Bus,
+and on Windows, where it uses a power request (PowerSetRequest) that
+also prevents the display from sleeping; check with `powercfg /requests`
+in an Administrator PowerShell). Inhibit the screensaver in the
 absence of keyboard input (e.g., while watching video), using the
 org.freedesktop.ScreenSaver D-Bus service:
 n = 0: (off) n= 1 (on during video activity) n=2 (always on).
